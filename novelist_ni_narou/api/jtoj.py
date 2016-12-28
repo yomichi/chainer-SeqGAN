@@ -3,9 +3,6 @@
 
 import json
 import glob
-from natto import MeCab
-
-m = MeCab('-Owakati')
 
 o = []
 files = glob.glob("g*.json")
