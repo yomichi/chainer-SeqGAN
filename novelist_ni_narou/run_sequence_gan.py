@@ -14,6 +14,8 @@ from chainer import serializers
 import tensorflow as tf
 import multiprocessing as mp
 
+use_gpu = False
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import SeqGAN, TextCNN
@@ -83,7 +85,10 @@ with open(os.path.join(out_dir, 'setting.txt'), 'w') as f:
         print('{} = {}'.format(k, v))
         f.write('{} = {}\n'.format(k, v))
 
-cuda.get_device(args.gpu).use()
+try:
+	cuda.get_device(args.gpu).use()
+except:
+	pass
 
 SEED = 88
 random.seed(SEED)
@@ -102,7 +107,9 @@ start_token = 0
 # generator
 generator = SeqGAN(vocab_size=vocab_size, emb_dim=args.gen_emb_dim, hidden_dim=args.gen_hidden_dim,
                    sequence_length=seq_length, start_token=start_token, lstm_layer=args.num_lstm_layer,
-                   dropout=True).to_gpu()
+                   dropout=True)
+if use_gpu:
+	genetator.to_gpu()
 if args.gen:
     serializers.load_hdf5(args.gen, generator)
 
@@ -110,7 +117,9 @@ if args.gen:
 discriminator = TextCNN(num_classes=2, vocab_size=vocab_size, embedding_size=args.dis_embedding_dim,
                         filter_sizes=[int(n) for n in args.dis_filter_sizes.split(',')],
                         num_filters=[int(n) for n in args.dis_num_filters.split(',')]
-                        ).to_gpu()
+                        )
+if use_gpu:
+	discriminator.to_gpu()
 if args.dis:
     serializers.load_hdf5(args.dis, discriminator)
 
