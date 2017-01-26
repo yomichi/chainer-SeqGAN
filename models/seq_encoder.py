@@ -3,7 +3,10 @@
 import chainer
 import chainer.functions as F
 import chainer.links as L
-from chainer.cuda import cupy as xp
+try:
+	from chainer.cuda import cupy as xp
+except:
+	import numpy as xp
 import numpy as np
 
 
