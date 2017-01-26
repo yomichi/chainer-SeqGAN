@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import re
 import unicodedata
 import numpy as np
@@ -14,7 +15,7 @@ class Arasuji(object):
         self.seq_length = seq_length
 
         self.raw_text=[]
-	raw_data = raw_data[0] # multipule data in a file
+        raw_data = raw_data[0] # multipule data in a file
         for i, j in enumerate(raw_data):
             x = self.clean(j['summary'])
             if x and len(x) < seq_length:
