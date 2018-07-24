@@ -238,7 +238,7 @@ if not args.dis:
                 x_batch = x[perm[i:i + batch_size]]
                 y_batch = y[perm[i:i + batch_size]]
                 loss, acc = discriminator(x_batch, y_batch, args.dis_dropout_keep_prob)
-                dis_optimizer.zero_grads()
+                discriminator.cleargrads()
                 loss.backward()
                 dis_optimizer.update()
                 sum_train_loss.append(float(loss.data))
@@ -279,7 +279,7 @@ for epoch in range(1, args.total_epoch):
         samples = generator.generate(batch_size, train=True)
         rewards = rollout_generator.get_rewards(samples, discriminator, pool=pool, gpu=args.gpu)
         loss = generator.reinforcement_step(samples, rewards, g_steps=args.g_steps)
-        gen_optimizer.zero_grads()
+        generator.cleargrads()
         loss.backward()
         gen_optimizer.update()
 
@@ -317,7 +317,7 @@ for epoch in range(1, args.total_epoch):
                 x_batch = x[perm[i:i + batch_size]]
                 y_batch = y[perm[i:i + batch_size]]
                 loss, acc = discriminator(x_batch, y_batch, args.dis_dropout_keep_prob)
-                dis_optimizer.zero_grads()
+                discriminator.cleargrads()
                 loss.backward()
                 dis_optimizer.update()
                 sum_train_loss.append(float(loss.data))

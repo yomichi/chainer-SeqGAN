@@ -91,18 +91,19 @@ class SeqGAN(chainer.Chain):
             self.state['h4'] = self.lstm4.h
 
     def set_state(self):
-        if hasattr(self, "lstm1"):
-            self.lstm1.set_state(chainer.Variable(self.state['c1'].data.copy(), volatile=True),
-                                 chainer.Variable(self.state['h1'].data.copy(), volatile=True))
-        if hasattr(self, "lstm2"):
-            self.lstm2.set_state(chainer.Variable(self.state['c2'].data.copy(), volatile=True),
-                                 chainer.Variable(self.state['h2'].data.copy(), volatile=True))
-        if hasattr(self, "lstm3"):
-            self.lstm3.set_state(chainer.Variable(self.state['c3'].data.copy(), volatile=True),
-                                 chainer.Variable(self.state['h3'].data.copy(), volatile=True))
-        if hasattr(self, "lstm4"):
-            self.lstm4.set_state(chainer.Variable(self.state['c4'].data.copy(), volatile=True),
-                                 chainer.Variable(self.state['h4'].data.copy(), volatile=True))
+        with chainer.using_config('volatile', True):
+            if hasattr(self, "lstm1"):
+                self.lstm1.set_state(chainer.Variable(self.state['c1'].data.copy()),
+                                     chainer.Variable(self.state['h1'].data.copy()))
+            if hasattr(self, "lstm2"):
+                self.lstm2.set_state(chainer.Variable(self.state['c2'].data.copy()),
+                                     chainer.Variable(self.state['h2'].data.copy()))
+            if hasattr(self, "lstm3"):
+                self.lstm3.set_state(chainer.Variable(self.state['c3'].data.copy()),
+                                     chainer.Variable(self.state['h3'].data.copy()))
+            if hasattr(self, "lstm4"):
+                self.lstm4.set_state(chainer.Variable(self.state['c4'].data.copy()),
+                                     chainer.Variable(self.state['h4'].data.copy()))
 
     def decode_one_step(self, x, train=True, z=None):
         with chainer.using_config('train', train):
@@ -146,42 +147,43 @@ class SeqGAN(chainer.Chain):
         :return: (batch_size, self.seq_length)
         """
 
-        self.reset_state()
-        batch_size = len(tag)
-        if train:
-            self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
+        with chainer.using_config('volatile', not train):
+            self.reset_state()
+            batch_size = len(tag)
+            if train:
+                self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
 
-        else:
-            if x is not None:
-                _, mu_z, ln_var_z = self.encoder.encode_with_tag(x, tag, train)
-                z = F.gaussian(mu_z, ln_var_z)
             else:
-                z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'), volatile=not train)
+                if x is not None:
+                    _, mu_z, ln_var_z = self.encoder.encode_with_tag(x, tag, train)
+                    z = F.gaussian(mu_z, ln_var_z)
+                else:
+                    z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'))
 
-            tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
-            self.lstm1.h = self.dec_input(F.concat((z, tag_)))
+                tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
+                self.lstm1.h = self.dec_input(F.concat((z, tag_)))
 
-        x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
+            x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
 
-        gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
+            gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
 
-        for i in range(self.sequence_length):
-            scores = self.decode_one_step(x, train)
-            pred = F.softmax(scores)
-            pred = cuda.to_cpu(pred.data)
-            # pred = cuda.to_cpu(pred.data) - np.finfo(np.float32).epsneg
+            for i in range(self.sequence_length):
+                scores = self.decode_one_step(x, train)
+                pred = F.softmax(scores)
+                pred = cuda.to_cpu(pred.data)
+                # pred = cuda.to_cpu(pred.data) - np.finfo(np.float32).epsneg
 
-            if pool:
-                generated = pool.map(choice, [(self.vocab_size, p) for p in pred])
-            else:
-                generated = [np.random.choice(self.vocab_size, p=pred[j]) for j in range(batch_size)]
-                # generated = []
-                # for j in range(batch_size):
-                #     # histogram = np.random.multinomial(1, pred[j])
-                #     # generated.append(int(np.nonzero(histogram)[0]))
+                if pool:
+                    generated = pool.map(choice, [(self.vocab_size, p) for p in pred])
+                else:
+                    generated = [np.random.choice(self.vocab_size, p=pred[j]) for j in range(batch_size)]
+                    # generated = []
+                    # for j in range(batch_size):
+                    #     # histogram = np.random.multinomial(1, pred[j])
+                    #     # generated.append(int(np.nonzero(histogram)[0]))
 
-            gen_x[:, i] = generated
-            x = chainer.Variable(self.xp.asanyarray(generated, 'int32'), volatile=not train)
+                gen_x[:, i] = generated
+                x = chainer.Variable(self.xp.asanyarray(generated, 'int32'))
 
         return gen_x
 
@@ -195,7 +197,7 @@ class SeqGAN(chainer.Chain):
 
         with chainer.using_config('volatile', True):
             if self.latent_dim:
-                z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.latent_dim)), 'float32'), volatile=True)
+                z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.latent_dim)), 'float32'))
             if random_input:
                 self.x0 = np.random.normal(scale=1, size=(batch_size, self.emb_dim))
                 x = chainer.Variable(self.xp.asanyarray(self.x0, 'float32'))
@@ -239,30 +241,31 @@ class SeqGAN(chainer.Chain):
 
         self.reset_state()
 
-        if self.latent_dim:
-            z = F.gaussian(mu_z, ln_var_z)
-        else:
-            latent = F.gaussian(mu_z, ln_var_z)
-            tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
-            self.lstm1.h = self.dec_input(F.concat((latent, tag_)))
-            z = None
-
-        accum_loss = 0
-        for i in range(self.sequence_length):
-            if i == 0:
-                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
+        with chainer.using_config('volatile', not train):
+            if self.latent_dim:
+                z = F.gaussian(mu_z, ln_var_z)
             else:
-                if np.random.random() < word_drop_ratio and train:
-                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
+                latent = F.gaussian(mu_z, ln_var_z)
+                tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
+                self.lstm1.h = self.dec_input(F.concat((latent, tag_)))
+                z = None
+
+            accum_loss = 0
+            for i in range(self.sequence_length):
+                if i == 0:
+                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
                 else:
-                    x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'), volatile=not train)
+                    if np.random.random() < word_drop_ratio and train:
+                        x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+                    else:
+                        x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'))
 
-            scores = self.decode_one_step(x, z=z)
-            loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32'), volatile=not train))
-            accum_loss += loss
+                scores = self.decode_one_step(x, z=z)
+                loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))
+                accum_loss += loss
 
-        dec_loss = accum_loss
-        kl_loss = F.gaussian_kl_divergence(mu_z, ln_var_z) / batch_size
+            dec_loss = accum_loss
+            kl_loss = F.gaussian_kl_divergence(mu_z, ln_var_z) / batch_size
         return dec_loss, kl_loss
 
     def pretrain_step_vrae(self, x_input, word_drop_ratio=0.0, train=True):
@@ -282,22 +285,23 @@ class SeqGAN(chainer.Chain):
             self.lstm1.h = F.gaussian(mu_z, ln_var_z)
             z = None
 
-        accum_loss = 0
-        for i in range(self.sequence_length):
-            if i == 0:
-                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
-            else:
-                if np.random.random() < word_drop_ratio and train:
-                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
+        with chainer.using_config('volatile', not train):
+            accum_loss = 0
+            for i in range(self.sequence_length):
+                if i == 0:
+                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
                 else:
-                    x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'), volatile=not train)
+                    if np.random.random() < word_drop_ratio and train:
+                        x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+                    else:
+                        x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'))
 
-            scores = self.decode_one_step(x, z=z)
-            loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32'), volatile=not train))
-            accum_loss += loss
+                scores = self.decode_one_step(x, z=z)
+                loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))
+                accum_loss += loss
 
-        dec_loss = accum_loss
-        kl_loss = F.gaussian_kl_divergence(mu_z, ln_var_z) / batch_size
+            dec_loss = accum_loss
+            kl_loss = F.gaussian_kl_divergence(mu_z, ln_var_z) / batch_size
         return dec_loss, kl_loss
 
     def pretrain_step_autoencoder(self, x_input):
@@ -432,59 +436,60 @@ class SeqGAN(chainer.Chain):
 
         :return: rewards (batch_size)
         """
-        tag = None
-        if len(args) == 4:
-            samples, given, dis, rollout_num = args
-        elif len(args) == 5:
-            samples, given, dis, rollout_num, gpu = args
-            cuda.get_device(gpu).use()
-            dis.to_gpu()
-            self.to_gpu()
-        elif len(args) == 6:
-            samples, given, dis, rollout_num, gpu, tag = args
-        else:
-            raise AssertionError('undesired argument')
+        with chainer.using_config('volatile', True):
+            tag = None
+            if len(args) == 4:
+                samples, given, dis, rollout_num = args
+            elif len(args) == 5:
+                samples, given, dis, rollout_num, gpu = args
+                cuda.get_device(gpu).use()
+                dis.to_gpu()
+                self.to_gpu()
+            elif len(args) == 6:
+                samples, given, dis, rollout_num, gpu, tag = args
+            else:
+                raise AssertionError('undesired argument')
 
-        batch_size = len(samples)
-        self.reset_state()
+            batch_size = len(samples)
+            self.reset_state()
 
-        if tag is not None:
-            self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
+            if tag is not None:
+                self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
 
-        gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
+            gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
 
-        x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=True)
-        self.decode_one_step(x, False)
-        for i in range(given):
-            gen_x[:, i] = samples[:, i]
-            x = chainer.Variable(self.xp.asanyarray(samples[:, i], 'int32'), volatile=True)
-            scores = self.decode_one_step(x, False)
-
-        scores_ = scores
-        self.save_state()
-
-        rewards = []
-        for _ in range(rollout_num):
-            self.set_state()
-            scores = chainer.Variable(scores_.data.copy(), volatile=True)
-            for i in range(given, self.sequence_length):
-
-                pred = F.softmax(scores)
-                pred = cuda.to_cpu(pred.data)
-
-                generated = [np.random.choice(self.vocab_size, p=pred[j]) for j in range(batch_size)]
-
-                # pred = cuda.to_cpu(pred.data) - np.finfo(np.float32).epsneg
-                # generated = []
-                # for j in range(batch_size):
-                #     histogram = np.random.multinomial(1, pred[j])
-                #     generated.append(int(np.nonzero(histogram)[0]))
-
-                gen_x[:, i] = generated
-                x = chainer.Variable(self.xp.asanyarray(generated, 'int32'), volatile=True)
+            x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+            self.decode_one_step(x, False)
+            for i in range(given):
+                gen_x[:, i] = samples[:, i]
+                x = chainer.Variable(self.xp.asanyarray(samples[:, i], 'int32'))
                 scores = self.decode_one_step(x, False)
 
-            rewards.append(dis.get_reward(gen_x))
+            scores_ = scores
+            self.save_state()
+
+            rewards = []
+            for _ in range(rollout_num):
+                self.set_state()
+                scores = chainer.Variable(scores_.data.copy())
+                for i in range(given, self.sequence_length):
+
+                    pred = F.softmax(scores)
+                    pred = cuda.to_cpu(pred.data)
+
+                    generated = [np.random.choice(self.vocab_size, p=pred[j]) for j in range(batch_size)]
+
+                    # pred = cuda.to_cpu(pred.data) - np.finfo(np.float32).epsneg
+                    # generated = []
+                    # for j in range(batch_size):
+                    #     histogram = np.random.multinomial(1, pred[j])
+                    #     generated.append(int(np.nonzero(histogram)[0]))
+
+                    gen_x[:, i] = generated
+                    x = chainer.Variable(self.xp.asanyarray(generated, 'int32'))
+                    scores = self.decode_one_step(x, False)
+
+                rewards.append(dis.get_reward(gen_x))
 
         return np.mean(rewards, axis=0)
 
@@ -499,7 +504,3 @@ class SeqGAN(chainer.Chain):
             supervised_g_losses.append(g_loss)
 
         return np.mean(supervised_g_losses)
-
-
-
-
