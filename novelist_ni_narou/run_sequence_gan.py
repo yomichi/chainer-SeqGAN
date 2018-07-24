@@ -64,7 +64,7 @@ args = parser.parse_args()
 
 # multiprocess worker
 if args.parallel > 0:
-    pool = mp.Pool(16)
+    pool = mp.Pool(24)
 else:
     pool = None
 
@@ -95,7 +95,9 @@ with open('dataset/arasuji.dat', 'rb') as f:
 
 train_num = len(arasuji.train_idx)
 test_num = len(arasuji.test_idx)
-vocab_size = 3000
+print('train_num = {}'.format(train_num))
+print('test_num = {}'.format(test_num))
+vocab_size = 2000
 seq_length = 40
 start_token = 0
 
@@ -130,12 +132,12 @@ sess.run(tf.initialize_all_variables())
 summary_dir = os.path.join(out_dir, "summaries")
 
 loss_ = tf.placeholder(tf.float32)
-train_loss_summary = tf.scalar_summary('train_loss', loss_)
-test_loss_summary = tf.scalar_summary('test_loss', loss_)
-dis_loss_summary = tf.scalar_summary('dis_loss', loss_)
-dis_acc_summary = tf.scalar_summary('dis_acc', loss_)
+train_loss_summary = tf.summary.scalar('train_loss', loss_)
+test_loss_summary = tf.summary.scalar('test_loss', loss_)
+dis_loss_summary = tf.summary.scalar('dis_loss', loss_)
+dis_acc_summary = tf.summary.scalar('dis_acc', loss_)
 
-summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
+summary_writer = tf.summary.FileWriter(summary_dir, sess.graph)
 
 dis_train_count = 0
 gen_train_count = 0
@@ -168,7 +170,7 @@ if not args.gen:
         for _ in range(train_num // batch_size):
             batch = arasuji.get_train_data(batch_size)
             g_loss = generator.pretrain_step(batch)
-            gen_optimizer.zero_grads()
+            generator.cleargrads()
             g_loss.backward()
             gen_optimizer.update()
             pre_train_loss.append(float(g_loss.data))

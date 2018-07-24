@@ -64,6 +64,6 @@ for major_code in ["c", "d"]:
     for minor_code in string.ascii_lowercase:
         if len(glob.glob(os.path.join(SAVEDIR, "n*{}{}.json".format(major_code, minor_code)))) > 0:
             continue
-        for i in range(10000):
+        for i in range(1000):
             print("n{:04}{}{}".format(i, major_code, minor_code))
             save("n{:04}{}{}".format(i, major_code, minor_code))

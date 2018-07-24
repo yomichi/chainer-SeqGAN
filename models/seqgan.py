@@ -105,40 +105,41 @@ class SeqGAN(chainer.Chain):
                                  chainer.Variable(self.state['h4'].data.copy(), volatile=True))
 
     def decode_one_step(self, x, train=True, z=None):
-        if self.dropout:
-            if z is not None:
-                h0 = F.concat((self.embed(x), z))
-            elif len(x.data.shape) == 2:
-                h0 = x
-            else:
-                h0 = self.embed(x)
+        with chainer.using_config('train', train):
+            if self.dropout:
+                if z is not None:
+                    h0 = F.concat((self.embed(x), z))
+                elif len(x.data.shape) == 2:
+                    h0 = x
+                else:
+                    h0 = self.embed(x)
 
-            h = self.lstm1(F.dropout(h0, ratio=self.dropout_ratio, train=train))
-            if hasattr(self, "lstm2"):
-                h = self.lstm2(F.dropout(h, ratio=self.dropout_ratio, train=train))
-            if hasattr(self, "lstm3"):
-                h = self.lstm3(F.dropout(h, ratio=self.dropout_ratio, train=train))
-            if hasattr(self, "lstm4"):
-                h = self.lstm4(F.dropout(h, ratio=self.dropout_ratio, train=train))
-            y = self.out(h)
-            return y
-        else:
-            if z is not None:
-                h0 = F.concat((self.embed(x), z))
-            elif len(x.data.shape) == 2:
-                h0 = x
+                h = self.lstm1(F.dropout(h0, ratio=self.dropout_ratio))
+                if hasattr(self, "lstm2"):
+                    h = self.lstm2(F.dropout(h, ratio=self.dropout_ratio))
+                if hasattr(self, "lstm3"):
+                    h = self.lstm3(F.dropout(h, ratio=self.dropout_ratio))
+                if hasattr(self, "lstm4"):
+                    h = self.lstm4(F.dropout(h, ratio=self.dropout_ratio))
+                y = self.out(h)
+                return y
             else:
-                h0 = self.embed(x)
+                if z is not None:
+                    h0 = F.concat((self.embed(x), z))
+                elif len(x.data.shape) == 2:
+                    h0 = x
+                else:
+                    h0 = self.embed(x)
 
-            h = self.lstm1(h0)
-            if hasattr(self, "lstm2"):
-                h = self.lstm2(h)
-            if hasattr(self, "lstm3"):
-                h = self.lstm3(h)
-            if hasattr(self, "lstm4"):
-                h = self.lstm4(h)
-            y = self.out(h)
-            return y
+                h = self.lstm1(h0)
+                if hasattr(self, "lstm2"):
+                    h = self.lstm2(h)
+                if hasattr(self, "lstm3"):
+                    h = self.lstm3(h)
+                if hasattr(self, "lstm4"):
+                    h = self.lstm4(h)
+                y = self.out(h)
+                return y
 
     def generate_use_tag(self, tag, x=None, pool=None, train=False):
         """
@@ -192,36 +193,37 @@ class SeqGAN(chainer.Chain):
         self.reset_state()
         z = None
 
-        if self.latent_dim:
-            z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.latent_dim)), 'float32'), volatile=True)
-        if random_input:
-            self.x0 = np.random.normal(scale=1, size=(batch_size, self.emb_dim))
-            x = chainer.Variable(self.xp.asanyarray(self.x0, 'float32'), volatile=True)
-        elif random_state:
-            self.lstm1.h = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'), volatile=True)
-            x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=True)
-        else:
-            x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=True)
-
-        gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
-
-        for i in range(self.sequence_length):
-            scores = self.decode_one_step(x, train, z)
-            pred = F.softmax(scores)
-            pred = cuda.to_cpu(pred.data)
-            # pred = cuda.to_cpu(pred.data) - np.finfo(np.float32).epsneg
-
-            if pool:
-                generated = pool.map(choice, [(self.vocab_size, p) for p in pred])
+        with chainer.using_config('volatile', True):
+            if self.latent_dim:
+                z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.latent_dim)), 'float32'), volatile=True)
+            if random_input:
+                self.x0 = np.random.normal(scale=1, size=(batch_size, self.emb_dim))
+                x = chainer.Variable(self.xp.asanyarray(self.x0, 'float32'))
+            elif random_state:
+                self.lstm1.h = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'))
+                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
             else:
-                generated = [np.random.choice(self.vocab_size, p=pred[j]) for j in range(batch_size)]
-                # generated = []
-                # for j in range(batch_size):
-                #     # histogram = np.random.multinomial(1, pred[j])
-                #     # generated.append(int(np.nonzero(histogram)[0]))
+                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
 
-            gen_x[:, i] = generated
-            x = chainer.Variable(self.xp.asanyarray(generated, 'int32'), volatile=True)
+            gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
+
+            for i in range(self.sequence_length):
+                scores = self.decode_one_step(x, train, z)
+                pred = F.softmax(scores)
+                pred = cuda.to_cpu(pred.data)
+                # pred = cuda.to_cpu(pred.data) - np.finfo(np.float32).epsneg
+
+                if pool:
+                    generated = pool.map(choice, [(self.vocab_size, p) for p in pred])
+                else:
+                    generated = [np.random.choice(self.vocab_size, p=pred[j]) for j in range(batch_size)]
+                    # generated = []
+                    # for j in range(batch_size):
+                    #     # histogram = np.random.multinomial(1, pred[j])
+                    #     # generated.append(int(np.nonzero(histogram)[0]))
+
+                gen_x[:, i] = generated
+                x = chainer.Variable(self.xp.asanyarray(generated, 'int32'))
 
         return gen_x
 

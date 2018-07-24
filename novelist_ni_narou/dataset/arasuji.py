@@ -44,8 +44,9 @@ class Arasuji(object):
                 self.data[i][len(self.raw_text[i])] = 1
 
         perm = np.random.permutation(self.data_num)
-        self.test_idx = perm[:11700]
-        self.train_idx = perm[11700:]
+        ntest = int(self.data_num/2)
+        self.test_idx = perm[:ntest]
+        self.train_idx = perm[ntest:]
 
     def clean(self, string):
         SpecialLetters = r"""＊|¥|￥|#|＃|？|×|＋|†|:|;|~|¨|\xad|°|´|'̈|゙ ゚
@@ -78,11 +79,11 @@ class Arasuji(object):
         return string
 
     def get_train_data(self,batch_size):
-        idx = np.random.choice(self.train_idx, batch_size, replace=False)
+        idx = np.random.choice(self.train_idx, batch_size, replace=True)
         return self.data[idx]
 
     def get_test_data(self, batch_size):
-        idx = np.random.choice(self.test_idx, batch_size, replace=False)
+        idx = np.random.choice(self.test_idx, batch_size, replace=True)
         return self.data[idx]
 
 
@@ -94,7 +95,7 @@ if __name__ == '__main__':
                 json_data.append(json.load(f))
         except:
             pass
-    Loader = Arasuji(json_data, vocab_size=3000, seq_length=40)
+    Loader = Arasuji(json_data, vocab_size=2000, seq_length=40)
 
     with open('arasuji.dat', 'wb') as f:
         pickle.dump(Loader, f)
